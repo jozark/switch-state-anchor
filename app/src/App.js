@@ -37,6 +37,29 @@ function App() {
     return provider
   }
 
+  async function initialize() {
+    const provider = await getProvider()
+    const program = new Program(idl, programId, provider)
+    try {
+      await program
+        .initialize()
+        .accounts({
+          switchAccount: switchAccount,
+          user: provider.wallet.PublicKey,
+          system_program: SystemProgram.programId,
+        })
+        .signers([switchAccount])
+        .rpc()
+
+      const account = await program.account.switchAccount.fetch(
+        switchAccount.publicKey
+      )
+      setValue(account.state.toString())
+    } catch (err) {
+      console.log(err)
+    }
+  }
+
   return (
     <div className="App">
       <header className="App-header">
