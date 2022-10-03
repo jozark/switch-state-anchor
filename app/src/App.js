@@ -1,83 +1,125 @@
-import "./App.css"
-import { useState } from "react"
-import { Connection, PublicKey, Keypair } from "@solana/web3.js"
-import { Program, Provider, web3 } from "@project-serum/anchor"
-import idl from "./idl.json"
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets"
+import './App.css';
+import { useState } from 'react';
+import { Connection, PublicKey } from '@solana/web3.js';
 import {
-  useWallet,
-  WalletProvider,
-  ConnectionProvider,
-} from "@solana/wallet-adapter-react"
-import {
-  WalletModalProvider,
-  WalletMultiButton,
-} from "@solana/wallet-adapter-react-ui"
-require("@solana/wallet-adapter-react-ui/styles.css")
+  Program, AnchorProvider, web3
+} from '@project-serum/anchor';
+import idl from './idl.json';
+
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { useWallet, WalletProvider, ConnectionProvider } from '@solana/wallet-adapter-react';
+import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+require('@solana/wallet-adapter-react-ui/styles.css');
 
 const wallets = [
-  // instantiate other wallet adapters if needed
+  /* view list of available wallets at https://github.com/solana-labs/wallet-adapter#wallets */
   new PhantomWalletAdapter(),
 ]
-const { Keypair, SystemProgram } = web3
-const switchAccount = Keypair.generate()
-const programId = new PublicKey(idl.metadata.address) // because it is a keypair
+
+const { SystemProgram, Keypair } = web3;
+/* create an account  */
+const baseAccount = Keypair.generate();
 const opts = {
-  preflightCommitment: "Processed", // wait for a processed confirmation
+  preflightCommitment: "processed"
 }
+const programID = new PublicKey(idl.metadata.address);
 
 function App() {
-  const [value, setValue] = useState(null)
-  const wallet = useWallet()
+  const [value, setValue] = useState(null);
+  const wallet = useWallet();
+
   async function getProvider() {
-    // collect all necessary information about the user
-    const network = "http://127.0.0.1:8899"
-    const connection = new Connection(network, opts.preflightCommitment)
-    const provider = new Provider(connection, wallet, opts.preflightCommitment)
-    return provider
+    /* create the provider and return it to the caller */
+    /* network set to local network for now */
+    const network = "http://127.0.0.1:8899";
+    const connection = new Connection(network, opts.preflightCommitment);
+
+    const provider = new AnchorProvider(
+      connection, wallet, opts.preflightCommitment,
+    );
+    return provider;
   }
 
-  async function initialize() {
+  async function createFlipper() {
     const provider = await getProvider()
-    const program = new Program(idl, programId, provider)
+    /* create the program interface combining the idl, program ID, and provider */
+    const program = new Program(idl, programID, provider);
     try {
-      await program
-        .initialize()
-        .accounts({
-          switchAccount: switchAccount,
-          user: provider.wallet.PublicKey,
-          system_program: SystemProgram.programId,
-        })
-        .signers([switchAccount])
-        .rpc()
+      /* interact with the program via rpc */
+      await program.rpc.initialize({
+        accounts: {
+          switchAccount: baseAccount.publicKey,
+          user: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        },
+        signers: [baseAccount]
+      });
 
-      const account = await program.account.switchAccount.fetch(
-        switchAccount.publicKey
-      )
-      setValue(account.state.toString())
+      const account = await program.account.switchAccount.fetch(baseAccount.publicKey);
+      console.log('dataAccount pub key: ', baseAccount.publicKey.toBase58())
+      console.log('user pub key: ', provider.wallet.publicKey.toBase58())
+      console.log('program id: ', SystemProgram.programId.toBase58())
+      console.log('account: ', account);
+      setValue(account.state.toString());
     } catch (err) {
-      console.log(err)
+      console.log("Transaction error: ", err);
     }
   }
 
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  )
+  async function flip() {
+    const provider = await getProvider();
+    const program = new Program(idl, programID, provider);
+    await program.rpc.flip({
+      accounts: {
+        switchAccount: baseAccount.publicKey
+      }
+    });
+
+    const account = await program.account.switchAccount.fetch(baseAccount.publicKey);
+    console.log('account: ', account);
+    setValue(account.state.toString());
+  }
+
+  if (!wallet.connected) {
+    /* If the user's wallet is not connected, display connect wallet button. */
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}>
+        <WalletMultiButton />
+      </div>
+    )
+  } else {
+    return (
+      <div className="App">
+        <div>
+          {
+            !value && (<button onClick={createFlipper}>Create a switch</button>)
+          }
+          {
+            value && <button onClick={flip}>Flip the Switch</button>
+          }
+
+          {
+            value ? (
+              <h2>{value}</h2>
+            ) : (
+              <h3>Please create the switch.</h3>
+            )
+          }
+        </div>
+      </div>
+    );
+  }
 }
 
-export default App
+/* wallet configuration as specified here: https://github.com/solana-labs/wallet-adapter#setup */
+const AppWithProvider = () => (
+  <ConnectionProvider endpoint="http://127.0.0.1:8899">
+    <WalletProvider wallets={wallets} autoConnect>
+      <WalletModalProvider>
+        <App />
+      </WalletModalProvider>
+    </WalletProvider>
+  </ConnectionProvider>
+)
+
+export default AppWithProvider;
