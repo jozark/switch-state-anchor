@@ -1,0 +1,15 @@
+[features]
+seeds = false
+skip-lint = false
+[programs.localnet]
+switch = "F74TQB1kWr1dyVLcyuSnx58w7rToynLTULX4V1wuyUoU"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "/Users/jozark/.config/solana/id.json"
+
+[scripts]
+test = "yarn run mocha -t 1000000 tests/"
